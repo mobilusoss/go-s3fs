@@ -21,13 +21,15 @@ type (
 		config *Config
 	}
 	Config struct {
-		NameSpace       string
-		Domain          string
-		Region          string
-		Bucket          string
-		EnableIAMAuth   bool
-		AccessKeyID     string
-		AccessSecretKey string
+		NameSpace         string
+		Domain            string
+		Region            string
+		Bucket            string
+		EnableIAMAuth     bool
+		AccessKeyID       string
+		AccessSecretKey   string
+		EnableMinioCompat bool
+		Endpoint          string
 	}
 	FileInfo struct {
 		Name string `json:"name"`
@@ -48,25 +50,29 @@ const (
 )
 
 func New(config *Config) *S3FS {
-	var sess *session.Session
 	if config.Region == "" {
 		config.Region = endpoints.ApNortheast1RegionID
 	}
-	if config.EnableIAMAuth {
-		sess = session.Must(session.NewSessionWithOptions(session.Options{
-			Config: aws.Config{
-				Region:      aws.String(config.Region),
-				Credentials: credentials.NewStaticCredentials(config.AccessKeyID, config.AccessSecretKey, ""),
-			},
-			SharedConfigState: session.SharedConfigDisable,
-		}))
-	} else {
-		sess = session.Must(session.NewSessionWithOptions(session.Options{
-			Config: aws.Config{
-				Region: aws.String(config.Region),
-			},
-		}))
+
+	options := session.Options{
+		Config: aws.Config{
+			Region: aws.String(config.Region),
+		},
 	}
+	if config.EnableIAMAuth {
+		options.Config.Credentials = credentials.NewStaticCredentials(config.AccessKeyID, config.AccessSecretKey, "")
+		options.SharedConfigState = session.SharedConfigDisable
+	}
+
+	if config.EnableMinioCompat {
+		options.Config.S3ForcePathStyle = aws.Bool(config.EnableMinioCompat)
+	}
+
+	if config.Endpoint != "" {
+		options.Config.Endpoint = aws.String(config.Endpoint)
+	}
+
+	sess := session.Must(session.NewSessionWithOptions(options))
 	serv := s3.New(sess)
 
 	return &S3FS{
@@ -74,6 +80,27 @@ func New(config *Config) *S3FS {
 		serv,
 		config,
 	}
+}
+
+func (this *S3FS) CreateBucket(name string) error {
+	_, err := this.s3.CreateBucket(&s3.CreateBucketInput{
+		Bucket: aws.String(name),
+	})
+	if err != nil {
+		return err
+	}
+
+	err = this.s3.WaitUntilBucketExists(&s3.HeadBucketInput{
+		Bucket: aws.String(name),
+	})
+	return err
+}
+
+func (this *S3FS) DeleteBucket(name string) error {
+	_, err := this.s3.DeleteBucket(&s3.DeleteBucketInput{
+		Bucket: aws.String(name),
+	})
+	return err
 }
 
 func (this *S3FS) List(key string) *[]FileInfo {
