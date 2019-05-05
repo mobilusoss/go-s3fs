@@ -18,15 +18,14 @@ func setup() {
 		AccessSecretKey: "secretkey",
 		Bucket: "test",
 	})
-	_ = fs.CreateBucket("test")
 }
 
 func teardown() {
-	if fs != nil {
-		if err := fs.BulkDelete("/"); err != nil {
-			println("teardown error:", err.Error())
-		}
-	}
+	// if fs != nil {
+	// 	if err := fs.BulkDelete("/"); err != nil {
+	// 		println("teardown error:", err.Error())
+	// 	}
+	// }
 }
 
 func TestMain(m *testing.M) {
@@ -35,6 +34,12 @@ func TestMain(m *testing.M) {
 	teardown()
 
 	os.Exit(exitCode)
+}
+
+func TestS3FS_CreateBucket(t *testing.T) {
+	if err := fs.CreateBucket("test"); err != nil {
+		t.Fatal("bucket create error:", err)
+	}
 }
 
 func TestS3FS_Put(t *testing.T) {
@@ -204,12 +209,39 @@ func TestS3FS_Move(t *testing.T) {
 }
 
 func TestS3FS_Delete(t *testing.T) {
-	if err := fs.Delete("/testfile"); err != nil {
-		t.Fatal("copy error:", err)
-	}
+	t.Run("rm", func(st *testing.T){
+		if err := fs.Delete("/testfile"); err != nil {
+			t.Fatal("copy error:", err)
+		}
 
-	_, err := fs.Get("/testfile")
-	if err == nil {
-		t.Fatal("io error:", err)
-	}
+		_, err := fs.Get("/testfile")
+		if err == nil {
+			t.Fatal("io error:", err)
+		}
+	})
+	t.Run("rm -r", func(st *testing.T){
+		if err := fs.Delete("/"); err != nil {
+			t.Fatal("copy error:", err)
+		}
+		list := fs.List("/")
+		if list == nil {
+			t.Fatal("s3 error")
+		}
+		if len(*list) != 0 {
+			t.Fatal("io error")
+		}
+	})
+}
+
+func TestS3FS_DeleteBucket(t *testing.T) {
+	t.Run("exists", func(st *testing.T){
+		if err := fs.DeleteBucket("test"); err != nil {
+			t.Fatal("bucket delete error:", err)
+		}
+	})
+	t.Run("non exists", func(st *testing.T){
+		if err := fs.DeleteBucket("dummybucket"); err == nil {
+			t.Fatal("io error:", err)
+		}
+	})
 }
