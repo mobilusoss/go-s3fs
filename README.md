@@ -1,8 +1,8 @@
 go-s3fs
 ====
 
-[![Build Status](https://travis-ci.org/mobilusoss/go-s3fs.svg?branch=develop)](https://travis-ci.org/mobilusoss/go-s3fs)
-[![codecov](https://codecov.io/gh/mobilusoss/go-s3fs/branch/develop/graph/badge.svg)](https://codecov.io/gh/mobilusoss/go-s3fs)
+[![Build Status](https://travis-ci.org/mobilusoss/go-s3fs.svg?branch=master)](https://travis-ci.org/mobilusoss/go-s3fs)
+[![codecov](https://codecov.io/gh/mobilusoss/go-s3fs/branch/master/graph/badge.svg)](https://codecov.io/gh/mobilusoss/go-s3fs)
 [![Go Report Card](https://goreportcard.com/badge/github.com/mobilusoss/go-s3fs)](https://goreportcard.com/report/github.com/mobilusoss/go-s3fs)
 [![codebeat badge](https://codebeat.co/badges/e03e3de0-9d71-43ce-a6ac-8e0c6445485a)](https://codebeat.co/projects/github-com-mobilusoss-go-s3fs-master)
 ![GitHub](https://img.shields.io/github/license/mobilusoss/go-s3fs.svg)
