@@ -18,6 +18,7 @@ func setup() {
 		AccessSecretKey: "secretkey",
 		Bucket: "test",
 	})
+	_ = fs.CreateBucket("test")
 }
 
 func teardown() {

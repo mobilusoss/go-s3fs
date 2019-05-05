@@ -82,6 +82,27 @@ func New(config *Config) *S3FS {
 	}
 }
 
+func (this *S3FS) CreateBucket(name string) error {
+	_, err := this.s3.CreateBucket(&s3.CreateBucketInput{
+		Bucket: aws.String(name),
+	})
+	if err != nil {
+		return err
+	}
+
+	err = this.s3.WaitUntilBucketExists(&s3.HeadBucketInput{
+		Bucket: aws.String(name),
+	})
+	return err
+}
+
+func (this *S3FS) DeleteBucket(name string) error {
+	_, err := this.s3.DeleteBucket(&s3.DeleteBucketInput{
+		Bucket: aws.String(name),
+	})
+	return err
+}
+
 func (this *S3FS) List(key string) *[]FileInfo {
 	fileList := make([]FileInfo, 0)
 	var continuationToken *string
