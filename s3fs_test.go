@@ -159,22 +159,50 @@ func TestS3FS_MkDir(t *testing.T) {
 }
 
 func TestS3FS_Copy(t *testing.T) {
-	if err := fs.Copy("/testfile", "/testdir1/testfile", nil); err != nil {
-		t.Fatal("copy error:", err)
-	}
+	t.Run("single copy", func(st *testing.T) {
+		if err := fs.Copy("/testfile", "/testdir1/testfile", nil); err != nil {
+			t.Fatal("copy error:", err)
+		}
+		readCloser, err := fs.Get("/testdir1/testfile")
+		if err != nil {
+			t.Fatal("get file error:", err)
+		}
+		buf := new(bytes.Buffer)
+		if _, err := buf.ReadFrom(*readCloser); err != nil {
+			t.Fatal("io error:", err)
+		}
+		body := buf.String()
+		if body != "this is test string" {
+			t.Fatal("invalid data")
+		}
+	})
+	t.Run("bulk copy", func(st *testing.T) {
+		if err := fs.MkDir("/bulkcopy_a"); err != nil {
+			t.Fatal(err)
+		}
+		if err := fs.Copy("/testfile", "/bulkcopy_a/testfile", nil); err != nil {
+			t.Fatal("copy error:", err)
+		}
+		if err := fs.MkDir("/bulkcopy_b"); err != nil {
+			t.Fatal("mkdir error:", err)
+		}
+		if err := fs.Copy("/bulkcopy_a/", "/bulkcopy_b/", nil); err != nil {
+			t.Fatal("copy error:", err)
+		}
 
-	readCloser, err := fs.Get("/testdir1/testfile")
-	if err != nil {
-		t.Fatal("get file error:", err)
-	}
-	buf := new(bytes.Buffer)
-	if _, err := buf.ReadFrom(*readCloser); err != nil {
-		t.Fatal("io error:", err)
-	}
-	body := buf.String()
-	if body != "this is test string" {
-		t.Fatal("invalid data")
-	}
+		readCloser, err := fs.Get("/bulkcopy_b/bulkcopy_a/testfile")
+		if err != nil {
+			t.Fatal("get file error:", err)
+		}
+		buf := new(bytes.Buffer)
+		if _, err := buf.ReadFrom(*readCloser); err != nil {
+			t.Fatal("io error:", err)
+		}
+		body := buf.String()
+		if body != "this is test string" {
+			t.Fatal("invalid data")
+		}
+	})
 }
 
 func TestS3FS_Move(t *testing.T) {
