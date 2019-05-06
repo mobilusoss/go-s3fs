@@ -309,9 +309,8 @@ func (this *S3FS) BulkCopy(prefix string, dest string, metadata *map[string]*str
 		var result error
 		wg := &sync.WaitGroup{}
 		for _, content := range list.Contents {
+			wg.Add(1)
 			go func(c s3.Object) {
-				wg.Add(1)
-
 				srcRel := strings.Replace(*c.Key, this.config.Domain, "", 1)
 				destRel := strings.Replace(dest, this.config.Domain, "", 1)
 				targetPath := destRel + strings.TrimPrefix(srcRel, baseKey)
