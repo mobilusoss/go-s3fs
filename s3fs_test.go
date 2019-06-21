@@ -247,6 +247,39 @@ func TestS3FS_Copy(t *testing.T) {
 	})
 }
 
+func TestS3FS_PathExists(t *testing.T) {
+	t.Run("root exists", func(st *testing.T) {
+		exists := fs.PathExists("/")
+		if exists != true {
+			t.Fatal("root path doesnt exist")
+		}
+	})
+	t.Run("file exists", func(st *testing.T) {
+		exists := fs.PathExists("/testfile")
+		if exists != true {
+			t.Fatal("root path doesnt exist")
+		}
+	})
+	t.Run("folder exists", func(st *testing.T) {
+		exists := fs.PathExists("/testdir1")
+		if exists != true {
+			t.Fatal("root path doesnt exist")
+		}
+	})
+	t.Run("non exists file", func(st *testing.T) {
+		exists := fs.PathExists("/dummyfile")
+		if exists == true {
+			t.Fatal("dummyfile shouldnt exist")
+		}
+	})
+	t.Run("non exists folder", func(st *testing.T) {
+		exists := fs.PathExists("/dummydir/")
+		if exists == true {
+			t.Fatal("dummydir shouldnt exist")
+		}
+	})
+}
+
 func TestS3FS_Move(t *testing.T) {
 	t.Run("single", func(st *testing.T) {
 		if err := fs.MkDir("/singlemove"); err != nil {
@@ -325,21 +358,6 @@ func TestS3FS_DeleteBucket(t *testing.T) {
 	t.Run("non exists", func(st *testing.T) {
 		if err := fs.DeleteBucket("dummybucket"); err == nil {
 			t.Fatal("io error:", err)
-		}
-	})
-}
-
-func TestS3FS_PathExists(t *testing.T) {
-	t.Run("exists", func(st *testing.T) {
-		exists := fs.PathExists("/")
-		if exists != true {
-			t.Fatal("root path doesnt exist")
-		}
-	})
-	t.Run("non exists", func(st *testing.T) {
-		exists := fs.PathExists("/dummydir/")
-		if exists == true {
-			t.Fatal("dummydir shouldnt exist")
 		}
 	})
 }
