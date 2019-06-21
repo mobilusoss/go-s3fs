@@ -2,16 +2,17 @@ package s3fs
 
 import (
 	"errors"
+	"io"
+	"net/url"
+	"strings"
+	"sync"
+
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/endpoints"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
-	"io"
-	"net/url"
-	"strings"
-	"sync"
 )
 
 type (
@@ -392,4 +393,20 @@ func (this *S3FS) getKey(key string) string {
 	}
 
 	return k + key
+}
+
+func (this *S3FS) PathExists(key string) bool {
+	list, err := this.s3.ListObjectsV2(&s3.ListObjectsV2Input{
+		Bucket:    aws.String(this.config.Bucket),
+		Prefix:    aws.String(this.getKey(key)),
+		Delimiter: aws.String("/"),
+		MaxKeys:   aws.Int64(1),
+	})
+	if err != nil {
+		return false
+	}
+	if *list.KeyCount > 0 {
+		return true
+	}
+	return false
 }
