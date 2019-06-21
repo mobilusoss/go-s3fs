@@ -12,11 +12,11 @@ var fs *S3FS
 func setup() {
 	fs = New(&Config{
 		EnableMinioCompat: true,
-		Endpoint: "http://127.0.0.1:9000",
-		EnableIAMAuth: true,
-		AccessKeyID: "accesskey",
-		AccessSecretKey: "secretkey",
-		Bucket: "test",
+		Endpoint:          "http://127.0.0.1:9000",
+		EnableIAMAuth:     true,
+		AccessKeyID:       "accesskey",
+		AccessSecretKey:   "secretkey",
+		Bucket:            "test",
 	})
 }
 
@@ -65,7 +65,7 @@ func TestS3FS_Info(t *testing.T) {
 }
 
 func TestS3FS_Get(t *testing.T) {
-	t.Run("exists", func(st *testing.T){
+	t.Run("exists", func(st *testing.T) {
 		readCloser, err := fs.Get("/testfile")
 		if err != nil {
 			st.Fatal("get file error:", err)
@@ -79,7 +79,7 @@ func TestS3FS_Get(t *testing.T) {
 			st.Fatal("invalid data")
 		}
 	})
-	t.Run("non exists", func(st *testing.T){
+	t.Run("non exists", func(st *testing.T) {
 		_, err := fs.Get("/foobar")
 		if err == nil {
 			st.Fatal("io error:", err)
@@ -88,7 +88,7 @@ func TestS3FS_Get(t *testing.T) {
 }
 
 func TestS3FS_List(t *testing.T) {
-	t.Run("exists", func(st *testing.T){
+	t.Run("exists", func(st *testing.T) {
 		list := fs.List("/")
 		if list == nil {
 			t.Fatal("cannot connect s3")
@@ -110,7 +110,7 @@ func TestS3FS_List(t *testing.T) {
 			t.Fatal("invalid file type:", file.Type)
 		}
 	})
-	t.Run("non exists", func(st *testing.T){
+	t.Run("non exists", func(st *testing.T) {
 		list := fs.List("/dummydir/")
 		if list == nil {
 			t.Fatal("cannot connect s3")
@@ -123,7 +123,7 @@ func TestS3FS_List(t *testing.T) {
 }
 
 func TestS3FS_MkDir(t *testing.T) {
-	t.Run("mkdir", func(st *testing.T){
+	t.Run("mkdir", func(st *testing.T) {
 		if err := fs.MkDir("/testdir1"); err != nil {
 			t.Fatal(err)
 		}
@@ -146,7 +146,7 @@ func TestS3FS_MkDir(t *testing.T) {
 			t.Fatal("invalid file type:", file.Type)
 		}
 	})
-	t.Run("mkdir -p", func(st *testing.T){
+	t.Run("mkdir -p", func(st *testing.T) {
 		if err := fs.MkDir("/testdir2/child"); err != nil {
 			t.Fatal(err)
 		}
@@ -292,7 +292,7 @@ func TestS3FS_Move(t *testing.T) {
 }
 
 func TestS3FS_Delete(t *testing.T) {
-	t.Run("rm", func(st *testing.T){
+	t.Run("rm", func(st *testing.T) {
 		if err := fs.Delete("/testfile"); err != nil {
 			t.Fatal("copy error:", err)
 		}
@@ -302,7 +302,7 @@ func TestS3FS_Delete(t *testing.T) {
 			t.Fatal("io error:", err)
 		}
 	})
-	t.Run("rm -r", func(st *testing.T){
+	t.Run("rm -r", func(st *testing.T) {
 		if err := fs.Delete("/"); err != nil {
 			t.Fatal("copy error:", err)
 		}
@@ -317,14 +317,29 @@ func TestS3FS_Delete(t *testing.T) {
 }
 
 func TestS3FS_DeleteBucket(t *testing.T) {
-	t.Run("exists", func(st *testing.T){
+	t.Run("exists", func(st *testing.T) {
 		if err := fs.DeleteBucket("test"); err != nil {
 			t.Fatal("bucket delete error:", err)
 		}
 	})
-	t.Run("non exists", func(st *testing.T){
+	t.Run("non exists", func(st *testing.T) {
 		if err := fs.DeleteBucket("dummybucket"); err == nil {
 			t.Fatal("io error:", err)
+		}
+	})
+}
+
+func TestS3FS_PathExists(t *testing.T) {
+	t.Run("exists", func(st *testing.T) {
+		exists := fs.PathExists("/")
+		if exists != true {
+			t.Fatal("root path doesnt exist")
+		}
+	})
+	t.Run("non exists", func(st *testing.T) {
+		exists := fs.PathExists("/dummydir/")
+		if exists == true {
+			t.Fatal("dummydir shouldnt exist")
 		}
 	})
 }
