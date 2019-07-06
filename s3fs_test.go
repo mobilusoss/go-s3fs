@@ -10,9 +10,13 @@ import (
 var fs *S3FS
 
 func setup() {
+	endpoint := "http://127.0.0.1:9000"
+	if os.Getenv("DRONE") == "true" {
+		endpoint = "http://minio:9000"
+	} 
 	fs = New(&Config{
 		EnableMinioCompat: true,
-		Endpoint:          "http://127.0.0.1:9000",
+		Endpoint:          endpoint,
 		EnableIAMAuth:     true,
 		AccessKeyID:       "accesskey",
 		AccessSecretKey:   "secretkey",
