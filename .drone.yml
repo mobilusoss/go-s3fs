@@ -12,6 +12,10 @@ services:
       MINIO_ACCESS_KEY: accesskey
       MINIO_SECRET_KEY: secretkey
 
+workspace:
+  base: /go
+  path: src/github.com/mobilusoss/go-s3fs
+
 steps:
   - name: test
     image: golang
