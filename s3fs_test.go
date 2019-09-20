@@ -287,13 +287,13 @@ func TestS3FS_PathExists(t *testing.T) {
 func TestS3FS_ExactPathExists(t *testing.T) {
 	t.Run("exact file exists", func(st *testing.T) {
 		exists := fs.PathExists("/testfile")
-		if exists != false {
+		if exists != true {
 			t.Fatal("file doesn't exist")
 		}
 	})
 	t.Run("exact file doesn't exists", func(st *testing.T) {
 		exists := fs.PathExists("/testfile2")
-		if exists != false {
+		if exists == true {
 			t.Fatal("file exists")
 		}
 	})
