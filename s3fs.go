@@ -421,12 +421,15 @@ func (this *S3FS) ExactPathExists(key string) bool {
 		return false
 	}
 
-	if *list.KeyCount > 0 {
-		for _, val := range list.Contents {
-			if *val.Key == this.getKey(key) {
-				return true
-			}
+	if *list.KeyCount == 0 {
+		return false
+	}
+
+	for _, val := range list.Contents {
+		if *val.Key == this.getKey(key) {
+			return true
 		}
 	}
+
 	return false
 }
