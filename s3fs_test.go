@@ -13,7 +13,7 @@ func setup() {
 	endpoint := "http://127.0.0.1:9000"
 	if os.Getenv("DRONE") == "true" {
 		endpoint = "http://minio:9000"
-	} 
+	}
 	fs = New(&Config{
 		EnableMinioCompat: true,
 		Endpoint:          endpoint,
@@ -280,6 +280,21 @@ func TestS3FS_PathExists(t *testing.T) {
 		exists := fs.PathExists("/dummydir/")
 		if exists == true {
 			t.Fatal("dummydir shouldnt exist")
+		}
+	})
+}
+
+func TestS3FS_ExactPathExists(t *testing.T) {
+	t.Run("exact file exists", func(st *testing.T) {
+		exists := fs.ExactPathExists("/testfile")
+		if exists != true {
+			t.Fatal("file doesn't exist")
+		}
+	})
+	t.Run("exact file doesn't exists", func(st *testing.T) {
+		exists := fs.ExactPathExists("/testfile2")
+		if exists == true {
+			t.Fatal("file exists")
 		}
 	})
 }

@@ -410,3 +410,26 @@ func (this *S3FS) PathExists(key string) bool {
 	}
 	return false
 }
+
+func (this *S3FS) ExactPathExists(key string) bool {
+	list, err := this.s3.ListObjectsV2(&s3.ListObjectsV2Input{
+		Bucket:    aws.String(this.config.Bucket),
+		Prefix:    aws.String(this.getKey(key)),
+		Delimiter: aws.String("/"),
+	})
+	if err != nil {
+		return false
+	}
+
+	if *list.KeyCount == 0 {
+		return false
+	}
+
+	for _, val := range list.Contents {
+		if *val.Key == this.getKey(key) {
+			return true
+		}
+	}
+
+	return false
+}
