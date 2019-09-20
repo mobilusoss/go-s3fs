@@ -252,12 +252,6 @@ func TestS3FS_Copy(t *testing.T) {
 }
 
 func TestS3FS_PathExists(t *testing.T) {
-	t.Run("error", func(st *testing.T) {
-		exists := fs.PathExists("//////")
-		if exists == true {
-			t.Fatal("should be error")
-		}
-	})
 	t.Run("root exists", func(st *testing.T) {
 		exists := fs.PathExists("/")
 		if exists != true {
@@ -291,12 +285,6 @@ func TestS3FS_PathExists(t *testing.T) {
 }
 
 func TestS3FS_ExactPathExists(t *testing.T) {
-	t.Run("error", func(st *testing.T) {
-		exists := fs.ExactPathExists("//////")
-		if exists == true {
-			t.Fatal("should be error")
-		}
-	})
 	t.Run("exact file exists", func(st *testing.T) {
 		exists := fs.ExactPathExists("/testfile")
 		if exists != true {
