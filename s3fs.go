@@ -304,7 +304,7 @@ func (this *S3FS) BulkCopy(prefix string, dest string, metadata *map[string]*str
 		}
 
 		k := strings.Split(prefix, "/")
-		currentKey := k[len(k)-2]
+		currentKey := k[len(k)-1]
 		baseKey := strings.TrimSuffix(prefix, currentKey+"/")
 
 		var result error
