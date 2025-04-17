@@ -2,13 +2,15 @@ package issue20
 
 import (
 	"bytes"
-	"github.com/mobilusoss/go-s3fs"
 	"io/ioutil"
 	"os"
 	"testing"
+
+	"github.com/mobilusoss/go-s3fs"
 )
 
 const bucket = "issue20"
+
 var fs *s3fs.S3FS
 
 func setup() {
@@ -176,8 +178,8 @@ func TestIssue20_Copy(t *testing.T) {
 	t.Run("single copy with metadata", func(st *testing.T) {
 		metadataKey := "Test-Metadata"
 		metadataValue := "test"
-		if err := fs.Copy("/test%file", "/test%metadata", &map[string]*string{
-			metadataKey: &metadataValue,
+		if err := fs.Copy("/test%file", "/test%metadata", map[string]string{
+			metadataKey: metadataValue,
 		}); err != nil {
 			st.Fatal("copy error:", err)
 		}
@@ -197,7 +199,7 @@ func TestIssue20_Copy(t *testing.T) {
 		if info == nil {
 			st.Fatal("s3 info error")
 		}
-		s3Metadata := *info.Metadata[metadataKey]
+		s3Metadata := info.Metadata[metadataKey]
 		if s3Metadata != metadataValue {
 			st.Fatal("s3 metadata error:", s3Metadata)
 		}
