@@ -20,8 +20,6 @@ steps:
   - name: test
     image: golang
     commands:
-      - go get -v github.com/golang/dep/...
-      - $GOPATH/bin/dep ensure
       - go test -race -coverprofile=coverage.txt -covermode=atomic
   - name: codecov
     image: plugins/codecov
