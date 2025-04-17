@@ -1,24 +1,25 @@
 package s3fs
 
 import (
+	"context"
 	"errors"
 	"io"
 	"net/url"
 	"strings"
 	"sync"
+	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/credentials"
-	"github.com/aws/aws-sdk-go/aws/endpoints"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/aws/aws-sdk-go/service/s3/s3manager"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	awsConfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
 
 type (
 	S3FS struct {
-		sess   *session.Session
-		s3     *s3.S3
+		s3     *s3.Client
 		config *Config
 	}
 	Config struct {
@@ -50,67 +51,73 @@ const (
 	File
 )
 
+var ctx = context.TODO()
+
 func New(config *Config) *S3FS {
 	if config.Region == "" {
-		config.Region = endpoints.ApNortheast1RegionID
+		config.Region = "ap-northeast-1"
 	}
 
-	options := session.Options{
-		Config: aws.Config{
-			Region: aws.String(config.Region),
-		},
-	}
+	cfg, _ := awsConfig.LoadDefaultConfig(ctx, awsConfig.WithRegion(config.Region))
+
 	if config.EnableIAMAuth {
-		options.Config.Credentials = credentials.NewStaticCredentials(config.AccessKeyID, config.AccessSecretKey, "")
-		options.SharedConfigState = session.SharedConfigDisable
+		cfg.Credentials = credentials.NewStaticCredentialsProvider(
+			config.AccessKeyID,
+			config.AccessSecretKey,
+			"",
+		)
 	}
 
-	if config.EnableMinioCompat {
-		options.Config.S3ForcePathStyle = aws.Bool(config.EnableMinioCompat)
-	}
+	serv := s3.NewFromConfig(cfg, func(o *s3.Options) {
+		if config.EnableMinioCompat {
+			o.UsePathStyle = config.EnableMinioCompat
+		}
+	})
 
 	if config.Endpoint != "" {
-		options.Config.Endpoint = aws.String(config.Endpoint)
+		cfg.BaseEndpoint = aws.String(config.Endpoint)
 	}
 
-	sess := session.Must(session.NewSessionWithOptions(options))
-	serv := s3.New(sess)
-
 	return &S3FS{
-		sess,
 		serv,
 		config,
 	}
 }
 
-func (this *S3FS) CreateBucket(name string) error {
-	_, err := this.s3.CreateBucket(&s3.CreateBucketInput{
+func (s3fs *S3FS) CreateBucket(name string) error {
+	_, err := s3fs.s3.CreateBucket(ctx, &s3.CreateBucketInput{
 		Bucket: aws.String(name),
 	})
 	if err != nil {
 		return err
 	}
 
-	err = this.s3.WaitUntilBucketExists(&s3.HeadBucketInput{
+	w := s3.NewBucketExistsWaiter(s3fs.s3)
+
+	err = w.Wait(ctx, &s3.HeadBucketInput{
+		Bucket: aws.String(name),
+	}, 5*time.Minute)
+	if err != nil {
+		return err
+	}
+
+	return err
+}
+
+func (s3fs *S3FS) DeleteBucket(name string) error {
+	_, err := s3fs.s3.DeleteBucket(ctx, &s3.DeleteBucketInput{
 		Bucket: aws.String(name),
 	})
 	return err
 }
 
-func (this *S3FS) DeleteBucket(name string) error {
-	_, err := this.s3.DeleteBucket(&s3.DeleteBucketInput{
-		Bucket: aws.String(name),
-	})
-	return err
-}
-
-func (this *S3FS) List(key string) *[]FileInfo {
+func (s3fs *S3FS) List(key string) *[]FileInfo {
 	fileList := make([]FileInfo, 0)
 	var continuationToken *string
 	for {
-		list, err := this.s3.ListObjectsV2(&s3.ListObjectsV2Input{
-			Bucket:            aws.String(this.config.Bucket),
-			Prefix:            aws.String(this.getKey(key)),
+		list, err := s3fs.s3.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
+			Bucket:            aws.String(s3fs.config.Bucket),
+			Prefix:            aws.String(s3fs.getKey(key)),
 			Delimiter:         aws.String("/"),
 			ContinuationToken: continuationToken,
 		})
@@ -118,13 +125,13 @@ func (this *S3FS) List(key string) *[]FileInfo {
 			return nil
 		}
 		for _, val := range list.CommonPrefixes {
-			if *val.Prefix == this.getKey("") {
+			if *val.Prefix == s3fs.getKey("") {
 				continue
 			}
 
 			k := strings.Split(*val.Prefix, "/")
 			name := k[len(k)-2]
-			path := "/" + strings.TrimPrefix(*val.Prefix, this.getKey(""))
+			path := "/" + strings.TrimPrefix(*val.Prefix, s3fs.getKey(""))
 			fileInfo := FileInfo{
 				Type: Directory,
 				Name: name,
@@ -134,16 +141,16 @@ func (this *S3FS) List(key string) *[]FileInfo {
 			fileList = append(fileList, fileInfo)
 		}
 		for _, val := range list.Contents {
-			if *val.Key == this.getKey("") {
+			if *val.Key == s3fs.getKey("") {
 				continue
 			}
-			if *val.Key == this.getKey(key) {
+			if *val.Key == s3fs.getKey(key) {
 				continue
 			}
 
 			k := strings.Split(*val.Key, "/")
 			name := k[len(k)-1]
-			path := "/" + strings.TrimPrefix(*val.Key, this.getKey(""))
+			path := "/" + strings.TrimPrefix(*val.Key, s3fs.getKey(""))
 			fileInfo := FileInfo{
 				Type: File,
 				Name: name,
@@ -164,13 +171,13 @@ func (this *S3FS) List(key string) *[]FileInfo {
 	return &fileList
 }
 
-func (this *S3FS) MkDir(key string) error {
+func (s3fs *S3FS) MkDir(key string) error {
 	if !strings.HasSuffix(key, "/") {
 		key += "/"
 	}
-	_, err := this.s3.PutObject(&s3.PutObjectInput{
-		Bucket: aws.String(this.config.Bucket),
-		Key:    aws.String(this.getKey(key)),
+	_, err := s3fs.s3.PutObject(ctx, &s3.PutObjectInput{
+		Bucket: aws.String(s3fs.config.Bucket),
+		Key:    aws.String(s3fs.getKey(key)),
 	})
 	if err != nil {
 		return err
@@ -178,10 +185,10 @@ func (this *S3FS) MkDir(key string) error {
 	return nil
 }
 
-func (this *S3FS) Get(key string) (*io.ReadCloser, error) {
-	output, err := this.s3.GetObject(&s3.GetObjectInput{
-		Bucket: aws.String(this.config.Bucket),
-		Key:    aws.String(this.getKey(key)),
+func (s3fs *S3FS) Get(key string) (*io.ReadCloser, error) {
+	output, err := s3fs.s3.GetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(s3fs.config.Bucket),
+		Key:    aws.String(s3fs.getKey(key)),
 	})
 	if err != nil {
 		return nil, err
@@ -189,11 +196,11 @@ func (this *S3FS) Get(key string) (*io.ReadCloser, error) {
 	return &output.Body, nil
 }
 
-func (this *S3FS) Put(key string, body io.ReadCloser, contentType string) error {
-	uploader := s3manager.NewUploader(this.sess)
-	_, err := uploader.Upload(&s3manager.UploadInput{
-		Bucket:      aws.String(this.config.Bucket),
-		Key:         aws.String(this.getKey(key)),
+func (s3fs *S3FS) Put(key string, body io.ReadCloser, contentType string) error {
+	uploader := manager.NewUploader(s3fs.s3)
+	_, err := uploader.Upload(ctx, &s3.PutObjectInput{
+		Bucket:      aws.String(s3fs.config.Bucket),
+		Key:         aws.String(s3fs.getKey(key)),
 		Body:        body,
 		ContentType: aws.String(contentType),
 	})
@@ -203,18 +210,18 @@ func (this *S3FS) Put(key string, body io.ReadCloser, contentType string) error 
 	return nil
 }
 
-func (this *S3FS) Delete(key string) error {
+func (s3fs *S3FS) Delete(key string) error {
 	if strings.HasSuffix(key, "/") {
-		return this.BulkDelete(key)
+		return s3fs.BulkDelete(key)
 	} else {
-		return this.SingleDelete(key)
+		return s3fs.SingleDelete(key)
 	}
 }
 
-func (this *S3FS) SingleDelete(key string) error {
-	_, err := this.s3.DeleteObject(&s3.DeleteObjectInput{
-		Bucket: aws.String(this.config.Bucket),
-		Key:    aws.String(this.getKey(key)),
+func (s3fs *S3FS) SingleDelete(key string) error {
+	_, err := s3fs.s3.DeleteObject(ctx, &s3.DeleteObjectInput{
+		Bucket: aws.String(s3fs.config.Bucket),
+		Key:    aws.String(s3fs.getKey(key)),
 	})
 	if err != nil {
 		return err
@@ -222,28 +229,28 @@ func (this *S3FS) SingleDelete(key string) error {
 	return nil
 }
 
-func (this *S3FS) BulkDelete(prefix string) error {
+func (s3fs *S3FS) BulkDelete(prefix string) error {
 	var continuationToken *string
 	for {
-		list, err := this.s3.ListObjectsV2(&s3.ListObjectsV2Input{
-			Bucket:            aws.String(this.config.Bucket),
-			Prefix:            aws.String(this.getKey(prefix)),
+		list, err := s3fs.s3.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
+			Bucket:            aws.String(s3fs.config.Bucket),
+			Prefix:            aws.String(s3fs.getKey(prefix)),
 			ContinuationToken: continuationToken,
 		})
 		if err != nil {
 			return err
 		}
 
-		objects := []*s3.ObjectIdentifier{}
+		objects := []types.ObjectIdentifier{}
 		for _, content := range list.Contents {
-			objects = append(objects, &s3.ObjectIdentifier{
+			objects = append(objects, types.ObjectIdentifier{
 				Key: content.Key,
 			})
 		}
 
-		_, err = this.s3.DeleteObjects(&s3.DeleteObjectsInput{
-			Bucket: aws.String(this.config.Bucket),
-			Delete: &s3.Delete{
+		_, err = s3fs.s3.DeleteObjects(ctx, &s3.DeleteObjectsInput{
+			Bucket: aws.String(s3fs.config.Bucket),
+			Delete: &types.Delete{
 				Objects: objects,
 			},
 		})
@@ -259,29 +266,29 @@ func (this *S3FS) BulkDelete(prefix string) error {
 	}
 }
 
-func (this *S3FS) Copy(src string, dest string, metadata *map[string]*string) error {
+func (s3fs *S3FS) Copy(src string, dest string, metadata map[string]string) error {
 	if strings.HasSuffix(src, "/") {
-		return this.BulkCopy(src, dest, metadata)
+		return s3fs.BulkCopy(src, dest, metadata)
 	} else {
-		return this.SingleCopy(src, dest, metadata)
+		return s3fs.SingleCopy(src, dest, metadata)
 	}
 }
 
-func (this *S3FS) SingleCopy(src string, dest string, metadata *map[string]*string) error {
+func (s3fs *S3FS) SingleCopy(src string, dest string, metadata map[string]string) error {
 	var err error
 	if metadata == nil {
-		_, err = this.s3.CopyObject(&s3.CopyObjectInput{
-			Bucket:     aws.String(this.config.Bucket),
-			CopySource: aws.String(url.QueryEscape(this.config.Bucket + "/" + this.getKey(src))),
-			Key:        aws.String(this.getKey(dest)),
+		_, err = s3fs.s3.CopyObject(ctx, &s3.CopyObjectInput{
+			Bucket:     aws.String(s3fs.config.Bucket),
+			CopySource: aws.String(url.QueryEscape(s3fs.config.Bucket + "/" + s3fs.getKey(src))),
+			Key:        aws.String(s3fs.getKey(dest)),
 		})
 	} else {
-		_, err = this.s3.CopyObject(&s3.CopyObjectInput{
-			Bucket:            aws.String(this.config.Bucket),
-			CopySource:        aws.String(url.QueryEscape(this.config.Bucket + "/" + this.getKey(src))),
-			Key:               aws.String(this.getKey(dest)),
-			Metadata:          *metadata,
-			MetadataDirective: aws.String(s3.MetadataDirectiveReplace),
+		_, err = s3fs.s3.CopyObject(ctx, &s3.CopyObjectInput{
+			Bucket:            aws.String(s3fs.config.Bucket),
+			CopySource:        aws.String(url.QueryEscape(s3fs.config.Bucket + "/" + s3fs.getKey(src))),
+			Key:               aws.String(s3fs.getKey(dest)),
+			Metadata:          metadata,
+			MetadataDirective: types.MetadataDirectiveReplace,
 		})
 	}
 
@@ -291,12 +298,12 @@ func (this *S3FS) SingleCopy(src string, dest string, metadata *map[string]*stri
 	return nil
 }
 
-func (this *S3FS) BulkCopy(prefix string, dest string, metadata *map[string]*string) error {
+func (s3fs *S3FS) BulkCopy(prefix string, dest string, metadata map[string]string) error {
 	var continuationToken *string
 	for {
-		list, err := this.s3.ListObjectsV2(&s3.ListObjectsV2Input{
-			Bucket:            aws.String(this.config.Bucket),
-			Prefix:            aws.String(this.getKey(prefix)),
+		list, err := s3fs.s3.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
+			Bucket:            aws.String(s3fs.config.Bucket),
+			Prefix:            aws.String(s3fs.getKey(prefix)),
 			ContinuationToken: continuationToken,
 		})
 		if err != nil {
@@ -311,16 +318,16 @@ func (this *S3FS) BulkCopy(prefix string, dest string, metadata *map[string]*str
 		wg := &sync.WaitGroup{}
 		for _, content := range list.Contents {
 			wg.Add(1)
-			go func(c s3.Object) {
-				srcRel := strings.Replace(*c.Key, this.config.Domain, "", 1)
-				destRel := strings.Replace(dest, this.config.Domain, "", 1)
+			go func(c types.Object) {
+				srcRel := strings.Replace(*c.Key, s3fs.config.Domain, "", 1)
+				destRel := strings.Replace(dest, s3fs.config.Domain, "", 1)
 				targetPath := destRel + strings.TrimPrefix(srcRel, baseKey)
 
 				var e error
 				if strings.HasSuffix(srcRel, "/") {
-					e = this.MkDir(targetPath)
+					e = s3fs.MkDir(targetPath)
 				} else {
-					e = this.SingleCopy(srcRel, targetPath, metadata)
+					e = s3fs.SingleCopy(srcRel, targetPath, metadata)
 				}
 
 				if e != nil {
@@ -328,7 +335,7 @@ func (this *S3FS) BulkCopy(prefix string, dest string, metadata *map[string]*str
 				}
 
 				wg.Done()
-			}(*content)
+			}(content)
 		}
 		wg.Wait()
 
@@ -344,63 +351,61 @@ func (this *S3FS) BulkCopy(prefix string, dest string, metadata *map[string]*str
 	}
 }
 
-func (this *S3FS) Move(src string, dest string) error {
+func (s3fs *S3FS) Move(src string, dest string) error {
 	if strings.HasSuffix(src, "/") {
-		return this.BulkMove(src, dest)
+		return s3fs.BulkMove(src, dest)
 	} else {
-		return this.SingleMove(src, dest)
+		return s3fs.SingleMove(src, dest)
 	}
 }
 
-func (this *S3FS) SingleMove(src string, dest string) error {
-	if err := this.Copy(src, dest, nil); err != nil {
+func (s3fs *S3FS) SingleMove(src string, dest string) error {
+	if err := s3fs.Copy(src, dest, nil); err != nil {
 		return err
 	}
-	if err := this.Delete(src); err != nil {
+	if err := s3fs.Delete(src); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (this *S3FS) BulkMove(prefix string, dest string) error {
-	if err := this.BulkCopy(prefix, dest, nil); err != nil {
+func (s3fs *S3FS) BulkMove(prefix string, dest string) error {
+	if err := s3fs.BulkCopy(prefix, dest, nil); err != nil {
 		return err
 	}
-	if err := this.BulkDelete(prefix); err != nil {
+	if err := s3fs.BulkDelete(prefix); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (this *S3FS) Info(key string) *s3.HeadObjectOutput {
-	result, _ := this.s3.HeadObject(&s3.HeadObjectInput{
-		Bucket: aws.String(this.config.Bucket),
-		Key:    aws.String(this.getKey(key)),
+func (s3fs *S3FS) Info(key string) *s3.HeadObjectOutput {
+	result, _ := s3fs.s3.HeadObject(ctx, &s3.HeadObjectInput{
+		Bucket: aws.String(s3fs.config.Bucket),
+		Key:    aws.String(s3fs.getKey(key)),
 	})
 	return result
 }
 
-func (this *S3FS) getKey(key string) string {
+func (s3fs *S3FS) getKey(key string) string {
 	k := ""
-	if this.config.NameSpace != "" {
-		k += this.config.NameSpace + "/"
+	if s3fs.config.NameSpace != "" {
+		k += s3fs.config.NameSpace + "/"
 	}
-	if this.config.Domain != "" {
-		k += this.config.Domain + "/"
+	if s3fs.config.Domain != "" {
+		k += s3fs.config.Domain + "/"
 	}
-	if strings.HasPrefix(key, "/") {
-		key = strings.TrimPrefix(key, "/")
-	}
+	key = strings.TrimPrefix(key, "/")
 
 	return k + key
 }
 
-func (this *S3FS) PathExists(key string) bool {
-	list, err := this.s3.ListObjectsV2(&s3.ListObjectsV2Input{
-		Bucket:    aws.String(this.config.Bucket),
-		Prefix:    aws.String(this.getKey(key)),
+func (s3fs *S3FS) PathExists(key string) bool {
+	list, err := s3fs.s3.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
+		Bucket:    aws.String(s3fs.config.Bucket),
+		Prefix:    aws.String(s3fs.getKey(key)),
 		Delimiter: aws.String("/"),
-		MaxKeys:   aws.Int64(1),
+		MaxKeys:   aws.Int32(1),
 	})
 	if err != nil {
 		return false
@@ -411,10 +416,10 @@ func (this *S3FS) PathExists(key string) bool {
 	return false
 }
 
-func (this *S3FS) ExactPathExists(key string) bool {
-	list, err := this.s3.ListObjectsV2(&s3.ListObjectsV2Input{
-		Bucket:    aws.String(this.config.Bucket),
-		Prefix:    aws.String(this.getKey(key)),
+func (s3fs *S3FS) ExactPathExists(key string) bool {
+	list, err := s3fs.s3.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
+		Bucket:    aws.String(s3fs.config.Bucket),
+		Prefix:    aws.String(s3fs.getKey(key)),
 		Delimiter: aws.String("/"),
 	})
 	if err != nil {
@@ -426,7 +431,7 @@ func (this *S3FS) ExactPathExists(key string) bool {
 	}
 
 	for _, val := range list.Contents {
-		if *val.Key == this.getKey(key) {
+		if *val.Key == s3fs.getKey(key) {
 			return true
 		}
 	}

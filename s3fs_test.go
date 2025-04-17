@@ -196,8 +196,8 @@ func TestS3FS_Copy(t *testing.T) {
 	t.Run("single copy with metadata", func(st *testing.T) {
 		metadataKey := "Test-Metadata"
 		metadataValue := "test"
-		if err := fs.Copy("/testfile", "/testmetadata", &map[string]*string{
-			metadataKey: &metadataValue,
+		if err := fs.Copy("/testfile", "/testmetadata", map[string]string{
+			metadataKey: metadataValue,
 		}); err != nil {
 			st.Fatal("copy error:", err)
 		}
@@ -217,7 +217,7 @@ func TestS3FS_Copy(t *testing.T) {
 		if info == nil {
 			st.Fatal("s3 info error")
 		}
-		s3Metadata := *info.Metadata[metadataKey]
+		s3Metadata := info.Metadata[metadataKey]
 		if s3Metadata != metadataValue {
 			st.Fatal("s3 metadata error:", s3Metadata)
 		}
